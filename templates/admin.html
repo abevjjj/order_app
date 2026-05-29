@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}后台管理{% endblock %}
+{% block nav_title %}后台管理{% endblock %}
+{% block nav_actions %}
+<a href="/admin/logout" class="nav-btn">退出</a>
+{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  <!-- 商品录入 -->
+  <div class="sec-title">批量录入商品</div>
+  <div class="card">
+    <div class="form-group">
+      <label class="form-label">每行一条：商品名,分类,单位（分类和单位可省略）</label>
+      <textarea class="form-input" id="batch-input" rows="6"
+        placeholder="西红柿,蔬菜,斤&#10;猪肉,肉类,斤&#10;酱油,调料,瓶&#10;矿泉水"></textarea>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="batchImport()">导入</button>
+    <div id="batch-result" style="margin-top:8px;font-size:13px;color:var(--primary);"></div>
+  </div>
+
+  <!-- 未分类快速归类 -->
+  {% set uncat = products | selectattr('category', 'equalto', '未分类') | list %}
+  {% if uncat %}
+  <div class="sec-title">未分类商品归类（{{ uncat|length }} 条）</div>
+  <div class="card">
+    <div id="uncat-list">
+      {% for p in uncat %}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;" id="uncat-row-{{ p.id }}">
+        <span style="flex:1;font-size:14px;">{{ p.name }}</span>
+        <input class="form-input" id="uncat-cat-{{ p.id }}" placeholder="输入分类"
+          style="width:110px;" list="cl-{{ p.id }}">
+        <datalist id="cl-{{ p.id }}">
+          {% for c in categories %}<option value="{{ c.name }}">{% endfor %}
+        </datalist>
+        <button class="btn btn-ghost btn-sm" onclick="assignCat('{{ p.id }}','{{ p.name }}')">确定</button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- 商品列表 -->
+  <div class="sec-title">商品列表（{{ products|length }} 条）</div>
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg);">
+            <th style="padding:10px 12px;text-align:left;font-weight:600;">商品名</th>
+            <th style="padding:10px 8px;text-align:left;font-weight:600;">分类</th>
+            <th style="padding:10px 8px;text-align:left;font-weight:600;">单位</th>
+            <th style="padding:10px 8px;text-align:center;font-weight:600;">次数</th>
+            <th style="padding:10px 8px;text-align:center;font-weight:600;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products | sort(attribute='name') %}
+          <tr style="border-top:1px solid var(--border);" id="row-{{ p.id }}">
+            <td style="padding:8px 12px;">{{ p.name }}</td>
+            <td style="padding:8px;">{{ p.category or '未分类' }}</td>
+            <td style="padding:8px;">{{ p.unit or '-' }}</td>
+            <td style="padding:8px;text-align:center;color:var(--text-sub);">{{ p.count or 0 }}</td>
+            <td style="padding:8px;text-align:center;">
+              <button class="btn btn-ghost btn-sm" style="padding:4px 8px;"
+                onclick="editProd('{{ p.id }}','{{ p.name }}','{{ p.category }}','{{ p.unit }}')">编辑</button>
+              <button class="btn btn-sm" style="padding:4px 8px;background:#fdecea;color:var(--danger);"
+                onclick="deleteProd('{{ p.id }}','{{ p.name }}')">删</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 分类管理 -->
+  <div class="sec-title">分类管理（顺序即展示顺序）</div>
+  <div class="card">
+    <div id="cat-list-admin">
+      {% for c in categories %}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:14px;flex:1;">{{ c.name }}</span>
+        <button class="btn btn-sm" style="background:#fdecea;color:var(--danger);padding:4px 8px;"
+          onclick="removeCat('{{ c.name }}')">删</button>
+      </div>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <input class="form-input" id="new-cat" placeholder="新分类名称" style="flex:1;">
+      <button class="btn btn-primary btn-sm" onclick="addCat()">添加</button>
+    </div>
+  </div>
+
+  <!-- 打印机配置 -->
+  <div class="sec-title">打印机配置</div>
+  <div class="card">
+    <div class="form-group">
+      <label class="form-label">打印机 IP 地址</label>
+      <input class="form-input" id="printer-ip" value="{{ config.printer_ip or '' }}" placeholder="192.168.1.xxx">
+    </div>
+    <div class="form-group">
+      <label class="form-label">端口（默认 9100）</label>
+      <input class="form-input" id="printer-port" type="number" value="{{ config.printer_port or 9100 }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">纸宽</label>
+      <select class="form-input" id="paper-width">
+        <option value="80" {% if config.paper_width==80 %}selected{% endif %}>80mm</option>
+        <option value="58" {% if config.paper_width==58 %}selected{% endif %}>58mm</option>
+      </select>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveConfig()">保存打印机配置</button>
+    <div id="config-result" style="margin-top:8px;font-size:13px;color:var(--primary);"></div>
+  </div>
+
+  <!-- 管理密码 -->
+  <div class="sec-title">管理后台密码</div>
+  <div class="card">
+    <div style="font-size:13px;color:var(--text-sub);margin-bottom:12px;">
+      当前状态：<strong>{{ '已启用密码保护' if config.admin_enabled else '未设置密码（任何人可访问）' }}</strong>
+    </div>
+    <div class="form-group">
+      <label class="form-label">设置新密码（留空则关闭密码保护）</label>
+      <input class="form-input" id="new-pw" type="password" placeholder="输入新密码，留空则取消密码">
+    </div>
+    <div class="form-group">
+      <label class="form-label">确认新密码</label>
+      <input class="form-input" id="new-pw2" type="password" placeholder="再次输入">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="savePw()">保存密码设置</button>
+    <div id="pw-result" style="margin-top:8px;font-size:13px;"></div>
+    <div style="margin-top:10px;font-size:12px;color:var(--text-sub);">
+      💡 访问路径：<code style="background:var(--bg);padding:2px 6px;border-radius:4px;">/admin</code>，
+      可将此链接保存到手机桌面
+    </div>
+  </div>
+
+</div>
+
+<!-- edit modal -->
+<div class="overlay" id="edit-overlay" onclick="if(event.target===this)closeEdit()">
+  <div class="modal">
+    <div class="modal-title">编辑商品</div>
+    <input type="hidden" id="edit-id">
+    <div class="form-group">
+      <label class="form-label">商品名称</label>
+      <input class="form-input" id="edit-name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">分类</label>
+      <input class="form-input" id="edit-category" list="edit-cat-list">
+      <datalist id="edit-cat-list">
+        {% for c in categories %}<option value="{{ c.name }}">{% endfor %}
+      </datalist>
+    </div>
+    <div class="form-group">
+      <label class="form-label">单位</label>
+      <input class="form-input" id="edit-unit" placeholder="斤/个/瓶…">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="saveEdit()">保存</button>
+      <button class="btn btn-ghost"   style="flex:1;" onclick="closeEdit()">取消</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _cats = {{ categories | map(attribute='name') | list | tojson }};
+
+async function batchImport() {
+  const text = document.getElementById('batch-input').value.trim();
+  if (!text) return;
+  const r = await fetch('/api/products/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+  const d = await r.json();
+  document.getElementById('batch-result').textContent =
+    d.ok ? `已导入 ${d.added.length} 条${d.added.length?'：'+d.added.slice(0,5).join('、')+(d.added.length>5?'…':''):''}` : '导入失败';
+  if (d.ok && d.added.length > 0) setTimeout(() => location.reload(), 800);
+}
+
+async function assignCat(id, name) {
+  const cat = document.getElementById('uncat-cat-' + id).value.trim();
+  if (!cat) { showToast('请输入分类'); return; }
+  await fetch('/api/products/assign_category',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assignments:[{id,category:cat}]})});
+  document.getElementById('uncat-row-'+id)?.remove();
+  showToast(name + ' → ' + cat);
+}
+
+function editProd(id, name, category, unit) {
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-name').value = name;
+  document.getElementById('edit-category').value = category;
+  document.getElementById('edit-unit').value = unit;
+  document.getElementById('edit-overlay').classList.add('open');
+}
+function closeEdit() { document.getElementById('edit-overlay').classList.remove('open'); }
+async function saveEdit() {
+  const id = document.getElementById('edit-id').value;
+  const name = document.getElementById('edit-name').value.trim();
+  const category = document.getElementById('edit-category').value.trim() || '未分类';
+  const unit = document.getElementById('edit-unit').value.trim();
+  if (!name) { showToast('名称不能为空'); return; }
+  await fetch('/api/products/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,name,category,unit})});
+  closeEdit(); showToast('已保存');
+  setTimeout(() => location.reload(), 500);
+}
+async function deleteProd(id, name) {
+  if (!confirm(`确认删除「${name}」？`)) return;
+  await fetch('/api/products/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+  document.getElementById('row-'+id)?.remove();
+  showToast('已删除：' + name);
+}
+
+function addCat() {
+  const inp = document.getElementById('new-cat');
+  const name = inp.value.trim();
+  if (!name || _cats.includes(name)) { showToast(_cats.includes(name)?'分类已存在':'请输入名称'); return; }
+  _cats.push(name); saveCats();
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+  div.innerHTML = `<span style="font-size:14px;flex:1;">${name}</span>
+    <button class="btn btn-sm" style="background:#fdecea;color:var(--danger);padding:4px 8px;"
+      onclick="removeCat('${name}')">删</button>`;
+  document.getElementById('cat-list-admin').appendChild(div);
+  inp.value = '';
+}
+function removeCat(name) {
+  _cats = _cats.filter(c => c !== name); saveCats();
+  document.getElementById('cat-list-admin').querySelectorAll('span').forEach(s => {
+    if (s.textContent.trim() === name) s.parentElement.remove();
+  });
+}
+async function saveCats() {
+  await fetch('/api/categories/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({categories:_cats.map((n,i)=>({name:n,order:i}))})});
+}
+
+async function saveConfig() {
+  const ip = document.getElementById('printer-ip').value.trim();
+  const port = parseInt(document.getElementById('printer-port').value)||9100;
+  const paper_width = parseInt(document.getElementById('paper-width').value);
+  const r = await fetch('/api/config/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({printer_ip:ip,printer_port:port,paper_width})});
+  const d = await r.json();
+  document.getElementById('config-result').textContent = d.ok ? '配置已保存 ✓' : '保存失败';
+}
+
+async function savePw() {
+  const pw  = document.getElementById('new-pw').value;
+  const pw2 = document.getElementById('new-pw2').value;
+  const res = document.getElementById('pw-result');
+  if (pw !== pw2) { res.style.color='var(--danger)'; res.textContent='两次密码不一致'; return; }
+  const r = await fetch('/api/config/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({admin_password_new: pw})});
+  const d = await r.json();
+  if (d.ok) {
+    res.style.color = 'var(--primary)';
+    res.textContent = pw ? '密码已设置，下次访问需要登录 ✓' : '密码保护已关闭 ✓';
+    document.getElementById('new-pw').value = '';
+    document.getElementById('new-pw2').value = '';
+  }
+}
+</script>
+{% endblock %}

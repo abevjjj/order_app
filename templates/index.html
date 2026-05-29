@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}快速下单{% endblock %}
+{% block nav_title %}快速下单{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div style="margin-bottom:10px;">
+    <input class="form-input" id="search" placeholder="搜索商品…" oninput="filterProducts(this.value)">
+  </div>
+  <div id="product-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+    {% for p in products %}
+    <button class="prod-btn" data-name="{{ p.name }}" data-category="{{ p.category or '未分类' }}" data-unit="{{ p.unit or '' }}"
+      onclick="quickAdd(this)"
+      style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 6px;
+             cursor:pointer;text-align:center;position:relative;transition:background .15s;">
+      {% if p.count > 0 %}
+      <span style="position:absolute;top:4px;right:6px;font-size:10px;color:var(--text-sub);">{{ p.count }}</span>
+      {% endif %}
+      <div style="font-size:15px;font-weight:500;margin-bottom:3px;word-break:break-all;">{{ p.name }}</div>
+      <div style="font-size:12px;color:var(--text-sub);">{{ p.unit or '' }}</div>
+    </button>
+    {% endfor %}
+    {% if not products %}
+    <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-sub);">
+      暂无商品，请先在<a href="/admin" style="color:var(--primary);">管理</a>中录入
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- qty modal -->
+<div class="overlay" id="qty-overlay" onclick="if(event.target===this)closeQty()">
+  <div class="modal">
+    <div class="modal-title" id="qty-modal-name"></div>
+    <div class="form-group">
+      <label class="form-label">数量</label>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="adjQty(-1)">−</button>
+        <input class="qty-input" id="qty-val" type="number" value="1" min="0.1" step="0.5">
+        <button class="qty-btn" onclick="adjQty(1)">+</button>
+        <span id="qty-unit" style="color:var(--text-sub);font-size:14px;margin-left:4px;"></span>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="confirmQty()">加入购物车</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _currentProd = null;
+
+function quickAdd(btn) {
+  _currentProd = { name: btn.dataset.name, category: btn.dataset.category, unit: btn.dataset.unit };
+  document.getElementById('qty-modal-name').textContent = _currentProd.name;
+  document.getElementById('qty-unit').textContent = _currentProd.unit || '';
+  document.getElementById('qty-val').value = 1;
+  document.getElementById('qty-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('qty-val').select(), 300);
+}
+function closeQty() { document.getElementById('qty-overlay').classList.remove('open'); }
+function adjQty(d) {
+  const inp = document.getElementById('qty-val');
+  inp.value = Math.max(0.1, Math.round((parseFloat(inp.value)||1)*10 + d*10)/10);
+}
+async function confirmQty() {
+  if (!_currentProd) return;
+  const qty = parseFloat(document.getElementById('qty-val').value) || 1;
+  closeQty();
+  await addToCartAPI(_currentProd, qty);
+  // flash button
+  document.querySelectorAll('.prod-btn').forEach(b => {
+    if (b.dataset.name === _currentProd.name) {
+      b.style.background = 'var(--primary-light)';
+      setTimeout(() => b.style.background = '#fff', 500);
+    }
+  });
+}
+function filterProducts(q) {
+  q = q.trim().toLowerCase();
+  document.querySelectorAll('.prod-btn').forEach(b => {
+    b.style.display = (!q || b.dataset.name.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+document.getElementById('qty-val').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmQty();
+});
+</script>
+{% endblock %}

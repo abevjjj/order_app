@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>管理后台登录</title>
+<style>
+:root { --primary: #2d5a27; --bg: #f5f4f0; --card: #fff; --border: #e0ddd8; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'PingFang SC','Microsoft YaHei',sans-serif; background: var(--bg);
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.box { background: var(--card); border-radius: 14px; padding: 36px 28px; width: 320px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.1); }
+.logo { text-align: center; margin-bottom: 28px; }
+.logo-icon { width: 52px; height: 52px; background: var(--primary); border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.logo-icon svg { width: 28px; height: 28px; stroke: #fff; fill: none; stroke-width: 2; }
+h2 { font-size: 18px; color: #1a1a1a; font-weight: 600; }
+.sub { font-size: 13px; color: #888; margin-top: 4px; }
+label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; margin-top: 18px; }
+input[type=password] { width: 100%; border: 1px solid var(--border); border-radius: 8px;
+  padding: 11px 14px; font-size: 16px; background: var(--bg); color: #1a1a1a; }
+input[type=password]:focus { outline: none; border-color: var(--primary); }
+.error { background: #fdecea; color: #c0392b; border-radius: 8px; padding: 8px 12px;
+  font-size: 13px; margin-top: 12px; }
+button { margin-top: 20px; width: 100%; background: var(--primary); color: #fff; border: none;
+  border-radius: 8px; padding: 12px; font-size: 16px; font-weight: 500; cursor: pointer; }
+button:active { opacity: .8; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+    </div>
+    <h2>后台管理</h2>
+    <div class="sub">请输入管理密码</div>
+  </div>
+  <form method="POST">
+    <label>管理密码</label>
+    <input type="password" name="password" autofocus placeholder="请输入密码">
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <button type="submit">登录</button>
+  </form>
+</div>
+</body>
+</html>

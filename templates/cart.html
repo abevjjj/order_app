@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}购物车{% endblock %}
+{% block nav_title %}购物车{% endblock %}
+{% block nav_actions %}
+<button class="nav-btn" onclick="clearCartAll()">清空</button>
+{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  <!-- 按分类分组的购物车 -->
+  <div id="cart-grouped"></div>
+  <div id="cart-empty" style="text-align:center;padding:60px 20px;color:var(--text-sub);display:none;">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" style="margin-bottom:12px;">
+      <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+    </svg>
+    <div>购物车为空</div>
+    <div style="font-size:13px;margin-top:6px;">去快速下单或分类页面添加商品</div>
+  </div>
+
+  <!-- 快速文本输入 -->
+  <div class="card">
+    <div class="sec-title">快速输入</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input class="form-input" id="text-input" placeholder='如：西红柿5斤 或 豆腐3'
+        style="flex:1;" onkeydown="if(event.key==='Enter')parseAndAdd()">
+      <button class="btn btn-ghost btn-sm" onclick="parseAndAdd()">添加</button>
+    </div>
+    <div id="parse-hint" style="font-size:12px;color:var(--text-sub);margin-top:6px;min-height:18px;"></div>
+  </div>
+
+  <!-- 下单按钮 -->
+  <button class="btn btn-accent btn-full" onclick="showConfirm()" id="submit-btn"
+    style="margin-bottom:16px;">下订货单</button>
+
+<!-- 确认弹窗 -->
+<div class="overlay" id="confirm-overlay">
+  <div class="modal" style="text-align:center;">
+    <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
+    <div class="modal-title" style="text-align:center;">请核对无误后下订货单</div>
+    <div style="font-size:14px;color:var(--text-sub);margin-bottom:24px;">下单后无法撤销！</div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-ghost" style="flex:1;padding:13px;" onclick="closeConfirm()">我再核对下</button>
+      <button class="btn btn-accent" style="flex:1;padding:13px;" onclick="confirmOrder()">确认下单</button>
+    </div>
+  </div>
+</div>
+
+  <!-- Markdown 结果 -->
+  <div id="result-section" style="display:none;">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="sec-title" style="margin:0;">订货单预览</div>
+        <button class="btn btn-ghost btn-sm" onclick="copyMd()">📋 复制</button>
+      </div>
+      <pre id="md-output" style="white-space:pre-wrap;font-size:14px;font-family:monospace;
+        background:var(--bg);border-radius:8px;padding:12px;line-height:1.8;"></pre>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let products_cache = [];
+
+fetch('/api/products').then(r=>r.json()).then(d=>{ products_cache = d; });
+
+// called by base.html polling whenever cart version changes
+function onCartUpdate(items) {
+  renderCart(items);
+}
+
+function renderCart(items) {
+  const grouped_div = document.getElementById('cart-grouped');
+  const empty_div   = document.getElementById('cart-empty');
+
+  if (!items || items.length === 0) {
+    grouped_div.innerHTML = '';
+    empty_div.style.display = '';
+    return;
+  }
+  empty_div.style.display = 'none';
+
+  // group by category
+  const groups = {};
+  items.forEach((item, idx) => {
+    const cat = item.category || '未分类';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push({ ...item, _idx: idx });
+  });
+
+  let html = '';
+  for (const [cat, citems] of Object.entries(groups)) {
+    html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;">
+      <div style="background:var(--primary-light);padding:8px 14px;font-size:13px;
+        font-weight:600;color:var(--primary);">📦 ${cat}</div>`;
+    citems.forEach(item => {
+      html += `
+      <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;
+        border-top:1px solid var(--border);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.name}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <button class="qty-btn" onclick="changeQty(${item._idx},-1)" style="width:28px;height:28px;font-size:18px;">−</button>
+          <input class="qty-input" type="number" value="${item.qty}" min="0.1" step="0.5"
+            onchange="setQty(${item._idx},this.value)" style="width:50px;font-size:14px;">
+          <span style="font-size:13px;color:var(--text-sub);min-width:14px;">${item.unit||''}</span>
+          <button class="qty-btn" onclick="changeQty(${item._idx},1)" style="width:28px;height:28px;font-size:18px;">+</button>
+          <button onclick="removeItem(${item._idx})"
+            style="width:28px;height:28px;border-radius:8px;border:none;background:#fdecea;
+              color:var(--danger);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  grouped_div.innerHTML = html;
+}
+
+async function changeQty(idx, d) {
+  const items = [..._cartItems];
+  items[idx].qty = Math.round((parseFloat(items[idx].qty)||1) * 10 + d * 10) / 10;
+  if (items[idx].qty < 0.1) items[idx].qty = 0.1;
+  await pushCart(items);
+}
+
+async function setQty(idx, v) {
+  const items = [..._cartItems];
+  items[idx].qty = Math.max(0.1, parseFloat(v)||0.1);
+  await pushCart(items);
+}
+
+async function removeItem(idx) {
+  const items = _cartItems.filter((_,i) => i !== idx);
+  await pushCart(items);
+}
+
+async function clearCartAll() {
+  if (_cartItems.length === 0) return;
+  if (!confirm('确认清空购物车？')) return;
+  await fetch('/api/cart/clear', { method:'POST' });
+  document.getElementById('result-section').style.display = 'none';
+}
+
+async function pushCart(items) {
+  const r = await fetch('/api/cart/update', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ items })
+  });
+  const d = await r.json();
+  if (d.ok) { _cartVersion = d.version; _cartItems = items; renderCart(items); updateCartBadge(); }
+}
+
+// 文本框解析
+async function parseAndAdd() {
+  const raw = document.getElementById('text-input').value.trim();
+  if (!raw) return;
+  const hint = document.getElementById('parse-hint');
+
+  const m = raw.match(/^([^\d]+?)\s*([\d.]+)?\s*([^\d\s]*)$/);
+  if (!m) { hint.textContent = '无法解析，请检查格式'; return; }
+  const name = m[1].trim();
+  const qty  = parseFloat(m[2]) || 1;
+  const unit_parsed = m[3].trim();
+  if (!name) { hint.textContent = '未识别到商品名'; return; }
+
+  const found = products_cache.find(p => p.name === name);
+  const unit     = unit_parsed || (found ? found.unit : '');
+  const category = found ? (found.category||'未分类') : '未分类';
+
+  await addToCartAPI({ name, category, unit }, qty);
+  document.getElementById('text-input').value = '';
+  hint.textContent = `✓ 已添加：${name} ${qty}${unit}`;
+  setTimeout(() => hint.textContent = '', 2000);
+
+  if (!found) {
+    fetch('/api/products/add', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, category:'未分类', unit })
+    }).then(r=>r.json()).then(d=>{ if(d.ok && !d.existed) products_cache.push(d.product); });
+  }
+}
+
+function showConfirm() {
+  if (!_cartItems || _cartItems.length === 0) { showToast('购物车为空'); return; }
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+async function confirmOrder() {
+  closeConfirm();
+  await _doSubmit();
+}
+async function _doSubmit() {
+  const items = _cartItems;
+  if (!items || items.length === 0) { showToast('购物车为空'); return; }
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = '提交中…';
+  try {
+    const r = await fetch('/api/orders/submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ items })
+    });
+    const data = await r.json();
+    if (!data.ok) { showToast(data.msg||'提交失败'); return; }
+    document.getElementById('md-output').textContent = data.markdown;
+    document.getElementById('result-section').style.display = '';
+    document.getElementById('result-section').scrollIntoView({behavior:'smooth'});
+    showToast('订货单已提交' + (data.print && data.print.ok ? ' · 已打印' : ''));
+    if (data.print && !data.print.ok && data.print.msg !== '未配置打印机')
+      setTimeout(() => showToast('打印失败：' + data.print.msg), 2200);
+  } finally {
+    btn.disabled = false; btn.textContent = '下订货单';
+  }
+}
+
+async function copyMd() {
+  const text = document.getElementById('md-output').textContent;
+  try { await navigator.clipboard.writeText(text); }
+  catch(e) {
+    const ta = document.createElement('textarea'); ta.value = text;
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  }
+  showToast('已复制到剪贴板');
+}
+
+// init render with whatever was fetched
+renderCart(_cartItems);
+</script>
+{% endblock %}

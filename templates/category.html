@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}分类下单{% endblock %}
+{% block nav_title %}分类下单{% endblock %}
+
+{% block content %}
+<div class="page" style="padding:0;">
+
+  <!-- 分类标签栏，用数字 idx 做标识，彻底避免中文 id 问题 -->
+  <div id="cat-tabs" style="display:flex;overflow-x:auto;background:#fff;
+    border-bottom:1px solid var(--border);padding:0 8px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;">
+    {% for idx, cat, items in cat_panels %}
+    <button class="cat-tab-btn" data-idx="{{ idx }}"
+      onclick="switchCat({{ idx }}, this)"
+      style="flex-shrink:0;border:none;background:none;padding:12px 14px;font-size:14px;
+        color:var(--text-sub);cursor:pointer;border-bottom:2px solid transparent;
+        white-space:nowrap;transition:all .15s;">{{ cat }}</button>
+    {% endfor %}
+  </div>
+
+  <!-- 商品面板，用数字 idx 做 id -->
+  <div style="padding:12px;">
+    {% if not cat_panels %}
+    <div style="text-align:center;padding:40px;color:var(--text-sub);">暂无商品</div>
+    {% endif %}
+    {% for idx, cat, items in cat_panels %}
+    <div class="cat-panel" id="panel-{{ idx }}" style="display:none;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+        {% for p in items %}
+        <button class="prod-btn"
+          data-name="{{ p.name }}"
+          data-category="{{ p.category or '未分类' }}"
+          data-unit="{{ p.unit or '' }}"
+          onclick="quickAdd(this)"
+          style="background:#fff;border:1px solid var(--border);border-radius:10px;
+            padding:12px 6px;cursor:pointer;text-align:center;position:relative;">
+          {% if p.count > 0 %}
+          <span style="position:absolute;top:4px;right:6px;font-size:10px;color:var(--text-sub);">{{ p.count }}</span>
+          {% endif %}
+          <div style="font-size:15px;font-weight:500;margin-bottom:3px;word-break:break-all;">{{ p.name }}</div>
+          <div style="font-size:12px;color:var(--text-sub);">{{ p.unit or '' }}</div>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- qty modal -->
+<div class="overlay" id="qty-overlay" onclick="if(event.target===this)closeQty()">
+  <div class="modal">
+    <div class="modal-title" id="qty-modal-name"></div>
+    <div class="form-group">
+      <label class="form-label">数量</label>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="adjQty(-1)">−</button>
+        <input class="qty-input" id="qty-val" type="number" value="1" min="0.1" step="0.5">
+        <button class="qty-btn" onclick="adjQty(1)">+</button>
+        <span id="qty-unit" style="color:var(--text-sub);font-size:14px;margin-left:4px;"></span>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="confirmQty()">加入购物车</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _currentProd = null;
+let _activeIdx   = -1;
+
+function switchCat(idx, btn) {
+  // 隐藏所有面板
+  document.querySelectorAll('.cat-panel').forEach(p => p.style.display = 'none');
+  // 显示目标
+  const panel = document.getElementById('panel-' + idx);
+  if (panel) panel.style.display = '';
+  // 更新标签样式
+  document.querySelectorAll('.cat-tab-btn').forEach(b => {
+    b.style.color            = 'var(--text-sub)';
+    b.style.borderBottomColor = 'transparent';
+    b.style.fontWeight       = '400';
+  });
+  btn.style.color            = 'var(--primary)';
+  btn.style.borderBottomColor = 'var(--primary)';
+  btn.style.fontWeight       = '600';
+  _activeIdx = idx;
+}
+
+// 初始化：激活第一个标签
+window.addEventListener('DOMContentLoaded', () => {
+  const first = document.querySelector('.cat-tab-btn');
+  if (first) switchCat(parseInt(first.dataset.idx), first);
+});
+
+function quickAdd(btn) {
+  _currentProd = { name: btn.dataset.name, category: btn.dataset.category, unit: btn.dataset.unit };
+  document.getElementById('qty-modal-name').textContent = _currentProd.name;
+  document.getElementById('qty-unit').textContent       = _currentProd.unit || '';
+  document.getElementById('qty-val').value              = 1;
+  document.getElementById('qty-overlay').classList.add('open');
+}
+function closeQty() { document.getElementById('qty-overlay').classList.remove('open'); }
+function adjQty(d) {
+  const inp = document.getElementById('qty-val');
+  inp.value = Math.max(0.1, Math.round((parseFloat(inp.value)||1)*10 + d*10)/10);
+}
+async function confirmQty() {
+  if (!_currentProd) return;
+  const qty = parseFloat(document.getElementById('qty-val').value) || 1;
+  closeQty();
+  await addToCartAPI(_currentProd, qty);
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('qty-overlay').classList.contains('open'))
+    confirmQty();
+});
+</script>
+{% endblock %}

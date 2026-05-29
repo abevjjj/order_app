@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}订货记录{% endblock %}
+{% block nav_title %}订货记录{% endblock %}
+
+{% block content %}
+<div class="page">
+  {% if not orders %}
+  <div style="text-align:center;padding:60px 20px;color:var(--text-sub);">暂无订货记录</div>
+  {% endif %}
+
+  {% for order in orders %}
+  <div class="card" style="margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--primary);">{{ order.id }}</div>
+        <div style="font-size:12px;color:var(--text-sub);">{{ order.created_at }}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-ghost btn-sm" onclick="toggleDetail('{{ order.id }}')">详情</button>
+        <button class="btn btn-ghost btn-sm" onclick="printOrder('{{ order.id }}')">打印</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyOrder('{{ order.id }}')">复制</button>
+      </div>
+    </div>
+
+    <!-- summary -->
+    <div style="font-size:13px;color:var(--text-sub);">
+      共 {{ order['items']|length }} 项：
+      {% for item in order['items'][:4] %}{{ item.name }}{% if not loop.last %}、{% endif %}{% endfor %}
+      {% if order['items']|length > 4 %}…等{% endif %}
+    </div>
+
+    <!-- detail (hidden) -->
+    <div id="detail-{{ order.id }}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+      {% for item in order['items'] %}
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:14px;">
+        <span>{{ item.name }}</span>
+        <span style="color:var(--primary);font-weight:500;">{{ item.qty }}{{ item.unit or '' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- hidden markdown data -->
+    <script type="application/json" id="md-{{ order.id }}">{{ order | tojson }}</script>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleDetail(id) {
+  const d = document.getElementById('detail-' + id);
+  d.style.display = d.style.display === 'none' ? '' : 'none';
+}
+
+async function printOrder(id) {
+  showToast('发送打印中…');
+  try {
+    const r = await fetch('/api/orders/print', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ order_id: id })
+    });
+    const data = await r.json();
+    showToast(data.ok ? '打印成功' : '打印失败：' + data.msg);
+  } catch(e) { showToast('请求失败'); }
+}
+
+async function copyOrder(id) {
+  const el = document.getElementById('md-' + id);
+  if (!el) return;
+  const order = JSON.parse(el.textContent);
+  // rebuild markdown
+  const items = order.items;
+  const grouped = {};
+  items.forEach(it => {
+    const cat = it.category || '未分类';
+    (grouped[cat] = grouped[cat]||[]).push(it);
+  });
+  let md = `# ${order.created_at} 订货单\n\n`;
+  for (const [cat, list] of Object.entries(grouped)) {
+    md += `## ${cat}\n`;
+    list.forEach(it => { md += `${it.name}：${it.qty}${it.unit||''}\n`; });
+    md += '\n';
+  }
+  try {
+    await navigator.clipboard.writeText(md.trim());
+    showToast('已复制');
+  } catch(e) {
+    const ta = document.createElement('textarea');
+    ta.value = md.trim(); document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('已复制');
+  }
+}
+</script>
+{% endblock %}
